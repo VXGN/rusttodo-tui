@@ -9,7 +9,6 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use event::handle_events;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{io, time::Duration};
 
@@ -39,23 +38,24 @@ fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,
 ) -> io::Result<()> {
-    loop {
-        terminal.draw(|f| ui::render(f, app))?;
+        loop {
+            terminal.draw(|f| ui::render(f, &app))?;
 
-        if let Some(key) = handle_events(Duration::from_millis(100))? {
-            match app.input_mode {
-                InputMode::Normal => handle_normal_mode(app, key),
-                InputMode::Adding => handle_adding_mode(app, key),
-                InputMode::ViewingDetails => handle_details_mode(app, key),
-                _ => {}
+            if let Some(key_event) = event::handle_events(Duration::from_millis(100))? {
+            if let Some(key_event) = event::handle_events(Duration::from_millis(100))? {
+                match app.input_mode {
+                    InputMode::Adding => handle_adding_mode(app, key_event),
+                    InputMode::Editing => handle_adding_mode(app, key_event),
+                    InputMode::Normal => handle_normal_mode(app, key_event),
+                    InputMode::ViewingDetails => handle_details_mode(app, key_event),
+                }
+            }
+                if app.should_quit {
+                    break;
+                }
             }
         }
-
-        if app.should_quit {
-            break;
-        }
-    }
-    Ok(())
+        Ok(())
 }
 
 fn handle_normal_mode(app: &mut App, key: crossterm::event::KeyEvent) {
