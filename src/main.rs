@@ -3,26 +3,31 @@ mod event;
 mod todo;
 mod ui;
 
-use app::{App, InputMode};
+use app::{AddingField, App, InputMode};
 use crossterm::{
-    event::KeyCode,
+    event::{KeyCode, KeyEventKind},  // Add KeyEventKind
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use event::handle_events;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{io, time::Duration};
 
 fn main() -> Result<(), io::Error> {
+    // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    // Create app
     let mut app = App::new();
 
+    // Run app
     let res = run_app(&mut terminal, &mut app);
 
+    // Restore terminal
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
@@ -38,30 +43,34 @@ fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,
 ) -> io::Result<()> {
-        loop {
-            terminal.draw(|f| ui::render(f, &app))?;
+    loop {
+        terminal.draw(|f| ui::render(f, app))?;
 
-            if let Some(key_event) = event::handle_events(Duration::from_millis(100))? {
-            if let Some(key_event) = event::handle_events(Duration::from_millis(100))? {
-                match app.input_mode {
-                    InputMode::Adding => handle_adding_mode(app, key_event),
-                    InputMode::Editing => handle_adding_mode(app, key_event),
-                    InputMode::Normal => handle_normal_mode(app, key_event),
-                    InputMode::ViewingDetails => handle_details_mode(app, key_event),
-                }
+        if let Some(key) = handle_events(Duration::from_millis(100))? {
+            // CRITICAL FIX: Only handle Press events, ignore Release and Repeat
+            if key.kind != KeyEventKind::Press {
+                continue;
             }
-                if app.should_quit {
-                    break;
-                }
+
+            match &app.input_mode {
+                InputMode::Normal => handle_normal_mode(app, key),
+                InputMode::Adding(_) => handle_adding_mode(app, key),
+                InputMode::ViewingDetails => handle_details_mode(app, key),
+                _ => {}
             }
         }
-        Ok(())
+
+        if app.should_quit {
+            break;
+        }
+    }
+    Ok(())
 }
 
 fn handle_normal_mode(app: &mut App, key: crossterm::event::KeyEvent) {
     match key.code {
         KeyCode::Char('q') => app.should_quit = true,
-        KeyCode::Char('a') => app.input_mode = InputMode::Adding,
+        KeyCode::Char('a') => app.input_mode = InputMode::Adding(AddingField::Title),
         KeyCode::Char('d') => app.delete_selected(),
         KeyCode::Char(' ') => app.toggle_selected(),
         KeyCode::Down | KeyCode::Char('j') => app.next_item(),
@@ -78,16 +87,43 @@ fn handle_adding_mode(app: &mut App, key: crossterm::event::KeyEvent) {
             app.input_mode = InputMode::Normal;
             app.input_buffer.clear();
             app.description_buffer.clear();
+            app.priority_index = 1;
         }
         KeyCode::Enter => {
             app.add_todo();
             app.input_mode = InputMode::Normal;
         }
+        KeyCode::Tab => {
+            // Switch between fields
+            app.input_mode = match &app.input_mode {
+                InputMode::Adding(AddingField::Title) => InputMode::Adding(AddingField::Description),
+                InputMode::Adding(AddingField::Description) => InputMode::Adding(AddingField::Title),
+                _ => InputMode::Adding(AddingField::Title),
+            };
+        }
         KeyCode::Char(c) => {
-            app.input_buffer.push(c);
+            // Add character to appropriate buffer based on current field
+            match &app.input_mode {
+                InputMode::Adding(AddingField::Title) => {
+                    app.input_buffer.push(c);
+                }
+                InputMode::Adding(AddingField::Description) => {
+                    app.description_buffer.push(c);
+                }
+                _ => {}
+            }
         }
         KeyCode::Backspace => {
-            app.input_buffer.pop();
+            // Remove character from appropriate buffer based on current field
+            match &app.input_mode {
+                InputMode::Adding(AddingField::Title) => {
+                    app.input_buffer.pop();
+                }
+                InputMode::Adding(AddingField::Description) => {
+                    app.description_buffer.pop();
+                }
+                _ => {}
+            }
         }
         KeyCode::Up => {
             if app.priority_index > 0 {
