@@ -5,9 +5,15 @@ use std::path::PathBuf;
 #[derive(Debug, PartialEq)]
 pub enum InputMode {
     Normal,
-    Adding,
+    Adding(AddingField),
     Editing,
     ViewingDetails,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum AddingField {
+    Title,
+    Description,
 }
 
 #[derive(Debug, PartialEq)]
@@ -43,7 +49,7 @@ impl App {
             input_mode: InputMode::Normal,
             input_buffer: String::new(),
             description_buffer: String::new(),
-            priority_index: 1,
+            priority_index: 1, // Medium by default
             should_quit: false,
             next_id: 0,
             storage_path,

@@ -1,4 +1,4 @@
-use crate::app::{App, InputMode, Tab};
+use crate::app::{AddingField, App, InputMode, Tab};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -181,23 +181,50 @@ fn render_details(f: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_input(f: &mut Frame, area: Rect, app: &App) {
-    match app.input_mode {
-        InputMode::Adding => {
+    match &app.input_mode {
+        InputMode::Adding(field) => {
             let priorities = ["Low", "Medium", "High"];
-            let input_text = format!(
-                "Title: {} | Desc: {} | Priority: {} (↑↓ to change)",
-                app.input_buffer,
-                if app.description_buffer.is_empty() {
-                    "<none>"
-                } else {
-                    &app.description_buffer
-                },
-                priorities[app.priority_index]
-            );
+            
+            let (title_style, desc_style) = match field {
+                AddingField::Title => (
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                AddingField::Description => (
+                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                ),
+            };
 
-            let input = Paragraph::new(input_text)
-                .style(Style::default().fg(Color::Yellow))
-                .block(Block::default().borders(Borders::ALL).title("Add Todo (Press Tab to switch fields, Enter to save, Esc to cancel)"));
+            let text = vec![
+                Line::from(vec![
+                    Span::styled("Title: ", title_style),
+                    Span::styled(&app.input_buffer, title_style),
+                    Span::styled(if matches!(field, AddingField::Title) { "█" } else { "" }, title_style),
+                ]),
+                Line::from(vec![
+                    Span::styled("Description: ", desc_style),
+                    Span::styled(&app.description_buffer, desc_style),
+                    Span::styled(if matches!(field, AddingField::Description) { "█" } else { "" }, desc_style),
+                ]),
+                Line::from(vec![
+                    Span::raw("Priority: "),
+                    Span::styled(
+                        priorities[app.priority_index],
+                        Style::default().fg(match app.priority_index {
+                            0 => Color::Green,
+                            1 => Color::Yellow,
+                            _ => Color::Red,
+                        }),
+                    ),
+                    Span::raw(" (↑↓ to change)"),
+                ]),
+            ];
+
+            let input = Paragraph::new(text)
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .title("Add Todo (Tab: switch field | Enter: save | Esc: cancel)"));
             f.render_widget(input, area);
         }
         _ => {
@@ -214,12 +241,12 @@ fn render_input(f: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_help(f: &mut Frame, area: Rect, app: &App) {
-    let help_text = match app.input_mode {
+    let help_text = match &app.input_mode {
         InputMode::Normal => {
             "[a]dd [d]elete [Space]toggle [Enter]details [Tab]switch-tab [q]uit"
         }
         InputMode::ViewingDetails => "[Esc]back",
-        InputMode::Adding => "[Enter]save [Esc]cancel [Tab]next-field [↑↓]priority",
+        InputMode::Adding(_) => "[Tab]switch-field [↑↓]priority [Enter]save [Esc]cancel",
         _ => "",
     };
 
