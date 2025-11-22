@@ -91,21 +91,20 @@ impl App {
     }
 
     pub fn delete_selected(&mut self) {
-        let filtered = self.filtered_todos();
-        if let Some(todo) = filtered.get(self.selected) {
-            let id = todo.id;
+        if let Some(id) = self.selected_todo_id() {
             self.todos.retain(|t| t.id != id);
-            if self.selected > 0 && self.selected >= self.filtered_todos().len() {
+    
+            let len = self.filtered_todos().len();
+            if self.selected >= len && self.selected > 0 {
                 self.selected -= 1;
             }
+    
             self.save();
         }
     }
 
     pub fn toggle_selected(&mut self) {
-        let filtered = self.filtered_todos();
-        if let Some(todo) = filtered.get(self.selected) {
-            let id = todo.id;
+        if let Some(id) = self.selected_todo_id() {
             if let Some(todo) = self.todos.iter_mut().find(|t| t.id == id) {
                 todo.toggle();
                 self.save();
