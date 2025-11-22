@@ -69,12 +69,9 @@ impl App {
 
     pub fn add_todo(&mut self) {
         if !self.input_buffer.is_empty() {
-            let priority = match self.priority_index {
-                0 => Priority::Low,
-                1 => Priority::Medium,
-                _ => Priority::High,
-            };
-
+            let priorities = [Priority::Low, Priority::Medium, Priority::High];
+            let priority = priorities[self.priority_index.clamp(0, 2)];
+            
             let todo = TodoItem::new(
                 self.next_id,
                 self.input_buffer.clone(),
