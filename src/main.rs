@@ -5,7 +5,7 @@ mod ui;
 
 use app::{AddingField, App, InputMode};
 use crossterm::{
-    event::{KeyCode, KeyEventKind},  // Add KeyEventKind
+    event::{KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -14,20 +14,15 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{io, time::Duration};
 
 fn main() -> Result<(), io::Error> {
-    // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create app
     let mut app = App::new();
-
-    // Run app
     let res = run_app(&mut terminal, &mut app);
 
-    // Restore terminal
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
@@ -47,17 +42,11 @@ fn run_app<B: ratatui::backend::Backend>(
         terminal.draw(|f| ui::render(f, app))?;
 
         if let Some(key) = handle_events(Duration::from_millis(100))? {
-            // CRITICAL FIX: Only handle Press events, ignore Release and Repeat
             if key.kind != KeyEventKind::Press {
                 continue;
             }
 
-            match &app.input_mode {
-                InputMode::Normal => handle_normal_mode(app, key),
-                InputMode::Adding(_) => handle_adding_mode(app, key),
-                InputMode::ViewingDetails => handle_details_mode(app, key),
-                _ => {}
-            }
+            handle_input(app, key);
         }
 
         if app.should_quit {
@@ -65,6 +54,17 @@ fn run_app<B: ratatui::backend::Backend>(
         }
     }
     Ok(())
+}
+
+fn handle_input(app: &mut App, key: crossterm::event::KeyEvent) {
+    match &app.input_mode {
+        InputMode::Normal => handle_normal_mode(app, key),
+        InputMode::Adding(_) => handle_adding_mode(app, key),
+        InputMode::ViewingDetails if key.code == KeyCode::Esc => {
+            app.input_mode = InputMode::Normal;
+        }
+        _ => {}
+    }
 }
 
 fn handle_normal_mode(app: &mut App, key: crossterm::event::KeyEvent) {
@@ -94,53 +94,32 @@ fn handle_adding_mode(app: &mut App, key: crossterm::event::KeyEvent) {
             app.input_mode = InputMode::Normal;
         }
         KeyCode::Tab => {
-            // Switch between fields
             app.input_mode = match &app.input_mode {
-                InputMode::Adding(AddingField::Title) => InputMode::Adding(AddingField::Description),
-                InputMode::Adding(AddingField::Description) => InputMode::Adding(AddingField::Title),
+                InputMode::Adding(AddingField::Title) => {
+                    InputMode::Adding(AddingField::Description)
+                }
+                InputMode::Adding(AddingField::Description) => {
+                    InputMode::Adding(AddingField::Title)
+                }
                 _ => InputMode::Adding(AddingField::Title),
             };
         }
-        KeyCode::Char(c) => {
-            // Add character to appropriate buffer based on current field
-            match &app.input_mode {
-                InputMode::Adding(AddingField::Title) => {
-                    app.input_buffer.push(c);
-                }
-                InputMode::Adding(AddingField::Description) => {
-                    app.description_buffer.push(c);
-                }
-                _ => {}
+        KeyCode::Char(c) => match &app.input_mode {
+            InputMode::Adding(AddingField::Title) => app.input_buffer.push(c),
+            InputMode::Adding(AddingField::Description) => app.description_buffer.push(c),
+            _ => {}
+        },
+        KeyCode::Backspace => match &app.input_mode {
+            InputMode::Adding(AddingField::Title) => {
+                app.input_buffer.pop();
             }
-        }
-        KeyCode::Backspace => {
-            // Remove character from appropriate buffer based on current field
-            match &app.input_mode {
-                InputMode::Adding(AddingField::Title) => {
-                    app.input_buffer.pop();
-                }
-                InputMode::Adding(AddingField::Description) => {
-                    app.description_buffer.pop();
-                }
-                _ => {}
+            InputMode::Adding(AddingField::Description) => {
+                app.description_buffer.pop();
             }
-        }
-        KeyCode::Up => {
-            if app.priority_index > 0 {
-                app.priority_index -= 1;
-            }
-        }
-        KeyCode::Down => {
-            if app.priority_index < 2 {
-                app.priority_index += 1;
-            }
-        }
+            _ => {}
+        },
+        KeyCode::Up if app.priority_index > 0 => app.priority_index -= 1,
+        KeyCode::Down if app.priority_index < 2 => app.priority_index += 1,
         _ => {}
-    }
-}
-
-fn handle_details_mode(app: &mut App, key: crossterm::event::KeyEvent) {
-    if key.code == KeyCode::Esc {
-        app.input_mode = InputMode::Normal;
     }
 }
